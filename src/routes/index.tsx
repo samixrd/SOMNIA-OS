@@ -1,49 +1,63 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { ArchitectView } from "@/components/views/ArchitectView";
-import { MonitorView } from "@/components/views/MonitorView";
-import { StabilityView } from "@/components/views/StabilityView";
-import { ForgeView } from "@/components/views/ForgeView";
+/**
+ * index.tsx  (updated)
+ * Changes from original:
+ *  1. WalletConnect button added to the global status bar
+ *  2. txLog state lifted here so ForgeView → MonitorView TX feed works instantly
+ *  3. ForgeView receives onTxSuccess callback
+ *  4. MonitorView receives externalLogs prop
+ */
 
-export const Route = createFileRoute("/")({
-  component: Index,
-});
+import { createFileRoute } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArchitectView }  from "@/components/views/ArchitectView";
+import { MonitorView }    from "@/components/views/MonitorView";
+import { StabilityView }  from "@/components/views/StabilityView";
+import { ForgeView }      from "@/components/views/ForgeView";
+import { WalletConnect }  from "@/components/WalletConnect";
+import type { TxLogEntry } from "@/lib/somniaService";
+
+export const Route = createFileRoute("/")({ component: Index });
 
 type ViewKey = "CORE_GENESIS" | "SWARM_HEARTBEAT" | "LOGIC_SYNAPSE" | "ASSET_FORGE";
 
 const TABS: { key: ViewKey; idx: string; label: string }[] = [
-  { key: "CORE_GENESIS", idx: "01", label: "01_CORE_GENESIS" },
-  { key: "SWARM_HEARTBEAT", idx: "02", label: "02_SWARM_HEARTBEAT" },
-  { key: "LOGIC_SYNAPSE", idx: "03", label: "03_LOGIC_SYNAPSE" },
-  { key: "ASSET_FORGE", idx: "04", label: "04_ASSET_FORGE" },
+  { key: "CORE_GENESIS",   idx: "01", label: "01_CORE_GENESIS"   },
+  { key: "SWARM_HEARTBEAT",idx: "02", label: "02_SWARM_HEARTBEAT"},
+  { key: "LOGIC_SYNAPSE",  idx: "03", label: "03_LOGIC_SYNAPSE"  },
+  { key: "ASSET_FORGE",    idx: "04", label: "04_ASSET_FORGE"    },
 ];
 
 type Metric = { cpu: number; mem: number; tps: number };
 
 function Index() {
-  const [activeTab, setActiveTab] = useState<ViewKey>("CORE_GENESIS");
-  const [time, setTime] = useState("");
-  const [metrics, setMetrics] = useState<Metric>({ cpu: 0.42, mem: 0.61, tps: 1840 });
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [activeTab,  setActiveTab]  = useState<ViewKey>("CORE_GENESIS");
+  const [time,       setTime]       = useState("");
+  const [metrics,    setMetrics]    = useState<Metric>({ cpu: 0.42, mem: 0.61, tps: 1840 });
+  const [helpOpen,   setHelpOpen]   = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [flash, setFlash] = useState<string | null>(null);
+  const [flash,      setFlash]      = useState<string | null>(null);
+
+  // ── Lifted TX log — shared between ForgeView (write) and MonitorView (read) ──
+  const [forgeLogs, setForgeLogs] = useState<TxLogEntry[]>([]);
+
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // clock
+  // Clock
   useEffect(() => {
-    const tick = () => setTime(new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC");
+    const tick = () =>
+      setTime(new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC");
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
 
-  // simulated global metrics
+  // Simulated global metrics
   useEffect(() => {
     const id = setInterval(() => {
       setMetrics((m) => ({
         cpu: Math.max(0.05, Math.min(0.99, m.cpu + (Math.random() - 0.5) * 0.08)),
-        mem: Math.max(0.1, Math.min(0.97, m.mem + (Math.random() - 0.5) * 0.04)),
-        tps: Math.max(120, Math.round(m.tps + (Math.random() - 0.5) * 220)),
+        mem: Math.max(0.1,  Math.min(0.97, m.mem + (Math.random() - 0.5) * 0.04)),
+        tps: Math.max(120,  Math.round(m.tps + (Math.random() - 0.5) * 220)),
       }));
     }, 1200);
     return () => clearInterval(id);
@@ -55,19 +69,20 @@ function Index() {
     flashTimer.current = setTimeout(() => setFlash(null), 1400);
   };
 
-  // keyboard shortcuts
+  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-        return;
-      }
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) return;
+
       if (e.key >= "1" && e.key <= "4") {
         const tab = TABS[Number(e.key) - 1];
-        if (tab) {
-          setActiveTab(tab.key);
-          triggerFlash(`→ ${tab.label}`);
-        }
+        if (tab) { setActiveTab(tab.key); triggerFlash(`→ ${tab.label}`); }
       } else if (e.key === "/") {
         e.preventDefault();
         triggerFlash("CLI :: not_yet_implemented");
@@ -84,48 +99,72 @@ function Index() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Callback passed to ForgeView → prepends new tx to MonitorView log
+  const handleTxSuccess = useCallback((entry: TxLogEntry) => {
+    setForgeLogs((prev) => [entry, ...prev].slice(0, 10));
+    triggerFlash(`TX_FORGED // ${entry.hash.slice(0, 10)}…`);
+    // Jump user to Monitor tab so they can see the TX live
+    setActiveTab("SWARM_HEARTBEAT");
+  }, []);
+
   return (
     <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
-      {/* GLOBAL STATUS BAR */}
+
+      {/* ── GLOBAL STATUS BAR ── */}
       <div className="shrink-0 border-b border-white/30 bg-black flex items-stretch font-mono text-[10px] tracking-[0.25em] text-white/70 h-9">
+        {/* Brand */}
         <div className="px-3 sm:px-4 flex items-center gap-2 border-r border-white/20 shrink-0">
           <span className="w-1.5 h-1.5 bg-white animate-pulse" />
           <span className="text-white font-bold">SOMNIA//OS</span>
         </div>
 
-        <Stat label="CPU_LOAD" value={`${(metrics.cpu * 100).toFixed(0)}%`} fill={metrics.cpu} alert={metrics.cpu > 0.85} />
-        <Stat label="MEMORY_POOL" value={`${(metrics.mem * 100).toFixed(0)}%`} fill={metrics.mem} alert={metrics.mem > 0.9} />
+        {/* Metrics */}
+        <Stat label="CPU_LOAD"     value={`${(metrics.cpu * 100).toFixed(0)}%`} fill={metrics.cpu} alert={metrics.cpu > 0.85} />
+        <Stat label="MEMORY_POOL"  value={`${(metrics.mem * 100).toFixed(0)}%`} fill={metrics.mem} alert={metrics.mem > 0.9} />
         <Stat label="SOMNIA_L1_TPS" value={metrics.tps.toLocaleString()} fill={Math.min(1, metrics.tps / 3000)} />
 
         <div className="flex-1" />
 
+        {/* Flash message */}
         {flash && (
           <div className="hidden md:flex items-center px-3 border-l border-white/20 text-white animate-pulse uppercase">
             {flash}
           </div>
         )}
 
-        <div className="hidden sm:flex items-center px-3 border-l border-white/20 text-white/60 truncate max-w-[260px]">
+        {/* Clock */}
+        <div className="hidden sm:flex items-center px-3 border-l border-white/20 text-white/60 truncate max-w-[200px]">
           {time}
         </div>
 
+        {/* ── WALLET CONNECT BUTTON ── */}
+        <div className="flex items-center px-2 border-l border-white/20">
+          <WalletConnect />
+        </div>
+
+        {/* Help */}
         <button
           type="button"
           onClick={() => setHelpOpen((v) => !v)}
           className={[
             "px-3 sm:px-4 border-l border-white/20 flex items-center gap-2 text-[10px] tracking-[0.3em] transition-colors",
-            helpOpen ? "bg-white text-black font-bold" : "text-white/70 hover:text-white hover:bg-white/10",
+            helpOpen
+              ? "bg-white text-black font-bold"
+              : "text-white/70 hover:text-white hover:bg-white/10",
           ].join(" ")}
           aria-expanded={helpOpen}
           aria-label="Keyboard shortcuts"
         >
-          <span className="w-4 h-4 border border-current flex items-center justify-center text-[9px] font-bold">?</span>
+          <span className="w-4 h-4 border border-current flex items-center justify-center text-[9px] font-bold">
+            ?
+          </span>
           <span className="hidden sm:inline">HELP</span>
         </button>
       </div>
 
-      {/* BODY */}
+      {/* ── BODY ── */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 relative">
+
         {/* SIDEBAR */}
         <aside className="lg:w-60 xl:w-64 lg:h-full border-b lg:border-b-0 lg:border-r border-white/20 flex flex-col shrink-0">
           <div className="px-4 lg:px-6 py-4 lg:py-5 border-b border-white/20 flex items-center gap-3">
@@ -133,8 +172,12 @@ function Index() {
               <div className="w-2.5 h-2.5 lg:w-3 lg:h-3 bg-white" />
             </div>
             <div className="min-w-0">
-              <div className="font-display text-sm lg:text-base leading-none truncate">SOMNIA</div>
-              <div className="font-mono text-[9px] lg:text-[10px] tracking-[0.3em] text-white/50 mt-1">CMD_CENTER</div>
+              <div className="font-display text-sm lg:text-base leading-none truncate">
+                SOMNIA
+              </div>
+              <div className="font-mono text-[9px] lg:text-[10px] tracking-[0.3em] text-white/50 mt-1">
+                CMD_CENTER
+              </div>
             </div>
           </div>
 
@@ -169,21 +212,26 @@ function Index() {
           </div>
         </aside>
 
-        {/* MAIN */}
+        {/* MAIN CONTENT */}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
           <div className="px-4 lg:px-8 py-2 lg:py-3 border-b border-white/20 flex items-center justify-between text-[9px] lg:text-[10px] tracking-[0.3em] text-white/50 shrink-0 gap-3">
-            <span className="truncate font-bold uppercase">// {activeTab}_VIEW</span>
-            <span className="shrink-0 whitespace-nowrap">SECURE <span className="text-white">●</span></span>
+            <span className="truncate font-bold uppercase">
+              // {activeTab}_VIEW
+            </span>
+            <span className="shrink-0 whitespace-nowrap">
+              SECURE <span className="text-white">●</span>
+            </span>
           </div>
+
           <div key={refreshKey} className="flex-1 min-h-0 overflow-auto">
-            {activeTab === "CORE_GENESIS" && <ArchitectView />}
-            {activeTab === "SWARM_HEARTBEAT" && <MonitorView />}
-            {activeTab === "LOGIC_SYNAPSE" && <StabilityView />}
-            {activeTab === "ASSET_FORGE" && <ForgeView />}
+            {activeTab === "CORE_GENESIS"    && <ArchitectView />}
+            {activeTab === "SWARM_HEARTBEAT" && <MonitorView externalLogs={forgeLogs} />}
+            {activeTab === "LOGIC_SYNAPSE"   && <StabilityView />}
+            {activeTab === "ASSET_FORGE"     && <ForgeView onTxSuccess={handleTxSuccess} />}
           </div>
         </main>
 
-        {/* HELP TOOLTIP / OVERLAY */}
+        {/* HELP OVERLAY */}
         {helpOpen && (
           <div
             className="absolute z-50 bottom-4 right-4 w-[min(92vw,320px)] bg-black border border-white text-white font-mono text-[11px] shadow-[6px_6px_0_0_#fff]"
@@ -191,7 +239,9 @@ function Index() {
             aria-label="Keyboard shortcuts"
           >
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/40">
-              <span className="tracking-[0.3em] font-bold text-[10px]">// KEYBOARD_SHORTCUTS</span>
+              <span className="tracking-[0.3em] font-bold text-[10px]">
+                // KEYBOARD_SHORTCUTS
+              </span>
               <button
                 onClick={() => setHelpOpen(false)}
                 className="w-5 h-5 border border-white/60 hover:border-white hover:bg-white hover:text-black flex items-center justify-center text-[10px] leading-none"
@@ -202,10 +252,10 @@ function Index() {
             </div>
             <ul className="divide-y divide-white/15">
               <ShortcutRow keys={["1", "·", "·", "4"]} desc="SWITCH_TAB" />
-              <ShortcutRow keys={["/"]} desc="OPEN_CLI" />
-              <ShortcutRow keys={["R"]} desc="REFRESH_SWARM_STATES" />
-              <ShortcutRow keys={["?"]} desc="TOGGLE_HELP" />
-              <ShortcutRow keys={["ESC"]} desc="DISMISS" />
+              <ShortcutRow keys={["/"]}                 desc="OPEN_CLI" />
+              <ShortcutRow keys={["R"]}                 desc="REFRESH_SWARM_STATES" />
+              <ShortcutRow keys={["?"]}                 desc="TOGGLE_HELP" />
+              <ShortcutRow keys={["ESC"]}               desc="DISMISS" />
             </ul>
             <div className="px-3 py-2 border-t border-white/40 text-white/50 text-[9px] tracking-[0.3em]">
               SOMNIA//CMD_CENTER · v0.9.21
@@ -217,16 +267,11 @@ function Index() {
   );
 }
 
+// ─── Stat bar widget ──────────────────────────────────────────────────────────
 function Stat({
-  label,
-  value,
-  fill,
-  alert,
+  label, value, fill, alert,
 }: {
-  label: string;
-  value: string;
-  fill: number;
-  alert?: boolean;
+  label: string; value: string; fill: number; alert?: boolean;
 }) {
   return (
     <div className="hidden xs:flex sm:flex items-center gap-2 sm:gap-3 px-3 sm:px-4 border-r border-white/20 shrink-0">
@@ -246,6 +291,7 @@ function Stat({
   );
 }
 
+// ─── Shortcut row ─────────────────────────────────────────────────────────────
 function ShortcutRow({ keys, desc }: { keys: string[]; desc: string }) {
   return (
     <li className="flex items-center justify-between gap-3 px-3 py-2">
@@ -260,7 +306,7 @@ function ShortcutRow({ keys, desc }: { keys: string[]; desc: string }) {
             >
               {k}
             </kbd>
-          ),
+          )
         )}
       </div>
       <span className="text-white/70 tracking-[0.2em] text-[10px]">{desc}</span>
