@@ -17,7 +17,7 @@ import { inAppWallet, createWallet } from "thirdweb/wallets";
 
 // ─── Thirdweb client (singleton) ─────────────────────────────────────────────
 export const thirdwebClient = createThirdwebClient({
-  clientId: "af8ec31b3e5cf4f71a068a70de92e8aa",
+  clientId: import.meta.env.VITE_THIRDWEB_CLIENT_ID,
 });
 
 // ─── Supported wallets ────────────────────────────────────────────────────────

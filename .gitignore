@@ -1,5 +1,61 @@
-# Logs
-logs
+# ============================================================
+#  SwarmForge .gitignore
+# ============================================================
+
+# ── Secrets — NEVER commit these ─────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+
+# ── Dependencies ─────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build output ─────────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+out/
+.output/
+
+# ── Vite cache ────────────────────────────────────────────────
+.vite/
+vite.config.ts.timestamp-*
+
+# ── TanStack Start / Nitro ────────────────────────────────────
+.vinxi/
+.nitro/
+.tanstack/
+
+# ── TypeScript ────────────────────────────────────────────────
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ── Editor & OS ───────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Logs ──────────────────────────────────────────────────────
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,26 +63,19 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-.output
-.vinxi
-.tanstack/**
-.nitro
+# ── Package manager ───────────────────────────────────────────
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnpm-store/
+
+# ── Testing ───────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Misc ──────────────────────────────────────────────────────
 *.local
-
-# Wrangler / Cloudflare
-.wrangler/
-.dev.vars
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.vercel
+.netlify
+.cloudflare
